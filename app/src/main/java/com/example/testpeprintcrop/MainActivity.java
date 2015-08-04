@@ -137,7 +137,7 @@ public class MainActivity extends Activity implements LoaderManager.LoaderCallba
             mState.data = intent.getData();
             mText.setText(mState.data.toString());
 
-            mImageView.setImageBitmap(null);
+            mImageView.setImageDrawable(null);
             View progressView = findViewById(R.id.loading);
             progressView.setVisibility(View.VISIBLE);
 
@@ -312,8 +312,7 @@ public class MainActivity extends Activity implements LoaderManager.LoaderCallba
                 cursor = context.getContentResolver().query(uri, proj, null, null, null);
                 if (cursor != null && cursor.moveToFirst()) {
                     int index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-                    String path = cursor.getString(index);
-                    return path;
+                    return cursor.getString(index);
                 }
             } finally {
                 if (cursor != null) {
@@ -343,8 +342,7 @@ public class MainActivity extends Activity implements LoaderManager.LoaderCallba
             Matrix matrix = new Matrix();
             matrix.setRotate(degree);
 
-            Bitmap rotated = Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
-            return rotated;
+            return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
         }
     }
 
