@@ -4,7 +4,7 @@ PrintStudio is an HTC inhouse app which can print images through cloud printing 
 
 ## ScreenShot
 
-![alt text](http://i.imgur.com/FjHYHl1.png)
+![screenshot](http://i.imgur.com/FjHYHl1l.png)
 
 ## Getting Started
 * Checkout the source
