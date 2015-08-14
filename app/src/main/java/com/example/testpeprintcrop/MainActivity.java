@@ -11,6 +11,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.Loader;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -21,6 +22,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Menu;
@@ -34,6 +36,8 @@ import android.widget.Toast;
 public class MainActivity extends Activity implements LoaderManager.LoaderCallbacks<Bitmap> {
 
     private static final String KEY_STATE = "tpc:state";
+    private static final String KEY_MIN_WIDTH = "min_width";
+    private static final String KEY_MIN_HEIGHT = "min_height";
 
     private String mOutputPath = "/mnt/sdcard/Android/data/xxx.jpg";
 
@@ -85,8 +89,12 @@ public class MainActivity extends Activity implements LoaderManager.LoaderCallba
             mState = new State();
             mState.cropRect = new Rect(0, 0, 0, 0);
 //            mState.data = Uri.parse("file:///mnt/sdcard/Pictures/Raph_Action.jpg");
-            mMinWidthText.setText("856");
-            mMinHeightText.setText("925");
+
+            SharedPreferences setting = PreferenceManager.getDefaultSharedPreferences(this);
+            int minWidth = setting.getInt(KEY_MIN_WIDTH, 856);
+            int minHeight = setting.getInt(KEY_MIN_HEIGHT, 925);
+            mMinWidthText.setText(Integer.toString(minWidth));
+            mMinHeightText.setText(Integer.toString(minHeight));
         }
     }
 
@@ -121,6 +129,33 @@ public class MainActivity extends Activity implements LoaderManager.LoaderCallba
         outState.putParcelable(KEY_STATE, mState);
 
         super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        SharedPreferences.Editor settingsEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
+        boolean hasValues = false;
+        try {
+            int minWidth = Integer.valueOf(mMinWidthText.getText().toString());
+            settingsEditor.putInt(KEY_MIN_WIDTH, minWidth);
+            hasValues = true;
+        } catch (NumberFormatException ex) {
+            // expected
+        }
+
+        try {
+            int minHeight = Integer.valueOf(mMinHeightText.getText().toString());
+            settingsEditor.putInt(KEY_MIN_HEIGHT, minHeight);
+            hasValues = true;
+        } catch (NumberFormatException ex) {
+            // expected
+        }
+
+        if (hasValues) {
+            settingsEditor.apply();
+        }
     }
 
     @Override
