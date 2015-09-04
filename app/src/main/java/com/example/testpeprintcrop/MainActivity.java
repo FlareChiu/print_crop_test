@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
-import android.app.Activity;
 import android.app.LoaderManager;
 import android.content.AsyncTaskLoader;
 import android.content.ContentResolver;
@@ -24,6 +23,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -31,9 +31,8 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
-public class MainActivity extends Activity implements LoaderManager.LoaderCallbacks<Bitmap> {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Bitmap> {
 
     private static final String KEY_STATE = "tpc:state";
     private static final String KEY_MIN_WIDTH = "min_width";
