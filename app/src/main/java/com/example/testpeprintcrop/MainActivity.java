@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
+import android.Manifest;
 import android.app.LoaderManager;
 import android.content.AsyncTaskLoader;
 import android.content.ContentResolver;
@@ -11,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.Loader;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -23,25 +25,32 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.preference.PreferenceManager;
 import android.provider.MediaStore;
+import android.provider.Settings;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Bitmap> {
+    private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String KEY_STATE = "tpc:state";
     private static final String KEY_MIN_WIDTH = "min_width";
     private static final String KEY_MIN_HEIGHT = "min_height";
 
+    private static final int REQUEST_PICK_IMAGE = 0;
+    private static final int REQUEST_CROP = 1;
+    private static final int REQUEST_APP_DETAIL_SETTING = 2;
+
     private String mOutputPath = "/mnt/sdcard/Android/data/xxx.jpg";
 
     private TextView mText;
-    private ImageView mImageView;
     private TextView mResultText;
     private EditText mMinWidthText, mMinHeightText;
 
@@ -52,13 +61,13 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
-        View pickerButon = findViewById(R.id.pick);
-        pickerButon.setOnClickListener(new View.OnClickListener() {            
+        View pickerButton = findViewById(R.id.pick);
+        pickerButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
                 photoPickerIntent.setType("image/*");
-                startActivityForResult(photoPickerIntent, 0);
+                startActivityForResult(photoPickerIntent, REQUEST_PICK_IMAGE);
             }
         });
         
@@ -71,29 +80,29 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         });
         
         mText = (TextView) findViewById(R.id.srcUri);
-        mImageView = (ImageView) findViewById(R.id.imageView1);
         mResultText = (TextView) findViewById(R.id.resultInfo);
         mMinWidthText = (EditText) findViewById(R.id.minWidth);
         mMinHeightText = (EditText) findViewById(R.id.minHeight);
 
         if (savedInstanceState != null) {
             mState = savedInstanceState.getParcelable(KEY_STATE);
-//            mState.data = Uri.parse("file:///mnt/sdcard/Pictures/Raph_Action.jpg");
 
             if (mState.data != null) {
                 getLoaderManager().initLoader(0, null, this);
             }
-
         } else {
             mState = new State();
             mState.cropRect = new Rect(0, 0, 0, 0);
-//            mState.data = Uri.parse("file:///mnt/sdcard/Pictures/Raph_Action.jpg");
 
             SharedPreferences setting = PreferenceManager.getDefaultSharedPreferences(this);
             int minWidth = setting.getInt(KEY_MIN_WIDTH, 856);
             int minHeight = setting.getInt(KEY_MIN_HEIGHT, 925);
             mMinWidthText.setText(Integer.toString(minWidth));
             mMinHeightText.setText(Integer.toString(minHeight));
+
+            getFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_image, ImageFragment.newInstance(false), ImageFragment.TAG)
+                    .commit();
         }
     }
 
@@ -120,7 +129,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         intent.putExtra("externalGivenOutputPath", mOutputPath);
         // Added in v2
         intent.putExtra("rectIn", mState.cropRect);
-        startActivityForResult(intent, 1);
+        startActivityForResult(intent, REQUEST_CROP);
     }
 
     @Override
@@ -141,7 +150,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             settingsEditor.putInt(KEY_MIN_WIDTH, minWidth);
             hasValues = true;
         } catch (NumberFormatException ex) {
-            // expected
+            notifyError(ex);
         }
 
         try {
@@ -149,7 +158,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             settingsEditor.putInt(KEY_MIN_HEIGHT, minHeight);
             hasValues = true;
         } catch (NumberFormatException ex) {
-            // expected
+            notifyError(ex);
         }
 
         if (hasValues) {
@@ -166,19 +175,25 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         }
         
         switch (requestCode) {
-        case 0:
+        case REQUEST_PICK_IMAGE:
             mState.dataPath = null;
             mState.data = intent.getData();
             mText.setText(mState.data.toString());
 
-            mImageView.setImageDrawable(null);
-            View progressView = findViewById(R.id.loading);
-            progressView.setVisibility(View.VISIBLE);
+            ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
+            if (imageFragment == null) {
+                imageFragment = ImageFragment.newInstance(true);
+                getFragmentManager().beginTransaction()
+                        .replace(R.id.fragment_image, imageFragment, ImageFragment.TAG)
+                        .commitAllowingStateLoss();
+            } else {
+                imageFragment.startLoading();
+            }
 
             getLoaderManager().restartLoader(0, null, this);
-
             break;
-        case 1:
+
+        case REQUEST_CROP:
             Rect cropRect = intent.getParcelableExtra("rectOut");
             if (cropRect != null) { // v2
                 mState.cropRect = cropRect;
@@ -206,6 +221,20 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                     mResultText.setText("Null result");
                 }
             }
+            break;
+
+        case REQUEST_APP_DETAIL_SETTING:
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED) {
+                if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) != null) {
+                    getFragmentManager().beginTransaction()
+                            .replace(R.id.fragment_image, ImageFragment.newInstance(true), ImageFragment.TAG)
+                            .commit();
+
+                    getLoaderManager().restartLoader(0, null, this);
+                }
+            }
+            break;
         }
     }
     
@@ -239,11 +268,34 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
     @Override
     public void onLoadFinished(Loader<Bitmap> loader, Bitmap data) {
-        mImageView.setImageBitmap(data);
-        View progressView = findViewById(R.id.loading);
-        progressView.setVisibility(View.INVISIBLE);
+        ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
+        if (imageFragment != null) {
+            imageFragment.setImageBitmap(data);
+        }
 
-        if (((BitmapLoader) loader).getShowBitmapDimension()) {
+        BitmapLoader bitmapLoader = (BitmapLoader) loader;
+        Throwable throwable = bitmapLoader.getThrowable();
+        if (throwable != null) {
+            // Permission denied
+            if (throwable instanceof SecurityException) {
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) == null) {
+                        getFragmentManager().beginTransaction()
+                                .replace(R.id.fragment_image, ImageNoPermissionFragment.newInstance(),
+                                        ImageNoPermissionFragment.TAG)
+                                .commitAllowingStateLoss();
+
+                        ActivityCompat.requestPermissions(this,
+                                new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
+                    }
+
+                    return;
+                }
+            }
+
+            notifyError(throwable);
+        } else if (bitmapLoader.getShowBitmapDimension()) {
             mResultText.setText("W x H = (" + data.getWidth() + ", " + data.getHeight() + ")");
         }
     }
@@ -253,11 +305,40 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
     }
 
+    /**
+     * Callback received when a permissions request has been completed.
+     */
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            getFragmentManager().beginTransaction()
+                    .replace(R.id.fragment_image, ImageFragment.newInstance(true), ImageFragment.TAG)
+                    .commitAllowingStateLoss();
+
+            getLoaderManager().restartLoader(0, null, this);
+        }
+    }
+
+    // Button callback in ImageNoPermissionFragment
+    public void onTurnOnInSettingClick(View view) {
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        startActivityForResult(intent, REQUEST_APP_DETAIL_SETTING);
+    }
+
+    // Button callback in ImageNoPermissionFragment
+    public void onTryRequestClick(View view) {
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
+    }
+
     private static class BitmapLoader extends AsyncTaskLoader<Bitmap> {
         public static final String ARGS_KEY_SHOW_BITMAP_DIMENSION = "show_bitmap_dimension";
         private Uri mUri;
         private String mPath;
         private boolean mShowBitmapDimension;
+        private Throwable mThrowable;
 
         public BitmapLoader(Context context) {
             super(context);
@@ -312,10 +393,8 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                         }
                     }
                 }
-            } catch (IOException ex) {
-
-            } catch (SecurityException ex) {
-
+            } catch (IOException|SecurityException ex) {
+                mThrowable = ex;
             } finally {
                 if (is != null) {
                     try {
@@ -332,6 +411,10 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         @Override
         protected void onStartLoading() {
             forceLoad();
+        }
+
+        public Throwable getThrowable() {
+            return mThrowable;
         }
 
         private static String queryPathFromUri(Context context, Uri uri) {
@@ -409,5 +492,10 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                 return new State[size];
             }
         };
+    }
+
+    private void notifyError(Throwable throwable) {
+        Log.e(TAG, "print-crop-test", throwable);
+        Toast.makeText(getApplicationContext(), throwable.toString(), Toast.LENGTH_LONG).show();
     }
 }

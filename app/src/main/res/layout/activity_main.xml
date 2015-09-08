@@ -12,20 +12,18 @@
         android:id="@+id/pick"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentTop="true"
-        android:layout_marginLeft="@dimen/margin_1"
-        android:layout_marginTop="@dimen/margin_1"
         android:text="Pick Photo"/>
 
     <TextView
         android:id="@+id/srcUri"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignStart="@+id/pick"
         android:layout_alignLeft="@+id/pick"
         android:layout_below="@+id/pick"
-        android:layout_marginLeft="@dimen/margin_1"
-        android:layout_marginTop="@dimen/margin_1"
         android:text="Image URI"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:freezesText="true"/>
@@ -34,45 +32,21 @@
         android:id="@+id/crop"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignStart="@+id/pick"
         android:layout_alignLeft="@+id/pick"
         android:layout_below="@+id/srcUri"
-        android:layout_marginTop="@dimen/margin_1"
         android:text="Crop!"/>
 
     <TextView
         android:id="@+id/resultInfo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignStart="@+id/pick"
         android:layout_alignLeft="@+id/pick"
         android:layout_below="@+id/crop"
-        android:layout_marginLeft="@dimen/margin_1"
-        android:layout_marginTop="@dimen/margin_1"
         android:text="Result"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:freezesText="true"/>
-
-    <ImageView
-        android:id="@+id/imageView1"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignLeft="@+id/crop"
-        android:layout_below="@+id/resultInfo"
-        android:layout_marginLeft="@dimen/margin_1"
-        android:layout_marginTop="@dimen/margin_1"/>
-
-    <ProgressBar
-        android:id="@+id/loading"
-        style="@android:style/Widget.DeviceDefault.Light.ProgressBar.Large"
-        android:visibility="invisible"
-        android:layout_alignLeft="@+id/crop"
-        android:layout_below="@+id/resultInfo"
-        android:layout_marginLeft="@dimen/margin_1"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:indeterminate="true"
-        android:indeterminateOnly="true"
-        android:background="@android:color/transparent" />
 
     <EditText
         android:layout_width="100dp"
@@ -81,6 +55,7 @@
         android:ems="10"
         android:id="@+id/minWidth"
         android:layout_alignBottom="@+id/crop"
+        android:layout_toEndOf="@+id/crop"
         android:layout_toRightOf="@+id/crop"
         />
 
@@ -91,7 +66,15 @@
         android:ems="10"
         android:id="@+id/minHeight"
         android:layout_alignBottom="@+id/crop"
+        android:layout_toEndOf="@+id/minWidth"
         android:layout_toRightOf="@+id/minWidth"
+        />
+
+    <FrameLayout
+        android:id="@+id/fragment_image"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/resultInfo"
         />
 
 </RelativeLayout>
