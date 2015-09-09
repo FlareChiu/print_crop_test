@@ -4,7 +4,7 @@ Test "print crop" intent (com.htc.pe.intent.action.EDIT_PRINT). This intent is s
 
 ## Build Server: Jenkins
 http://10.5.24.157:8080/jenkins/job/print-crop-test/
-
+ 
 ## ScreenShot
 
 ![screenshot](http://i.imgur.com/FjHYHl1l.png)
