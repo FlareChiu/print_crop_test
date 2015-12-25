@@ -339,6 +339,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         private String mPath;
         private boolean mShowBitmapDimension;
         private Throwable mThrowable;
+        private Bitmap mData;
 
         public BitmapLoader(Context context) {
             super(context);
@@ -410,7 +411,36 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
         @Override
         protected void onStartLoading() {
-            forceLoad();
+            if (mData != null) {
+                deliverResult(mData);
+            } else {
+                forceLoad();
+            }
+        }
+
+        @Override
+        protected void onStopLoading() {
+            cancelLoad();
+        }
+
+        @Override
+        protected void onReset() {
+            onStopLoading();
+
+            mData = null;
+        }
+
+        @Override
+        public void deliverResult(Bitmap data) {
+            if (isReset()) {
+                return;
+            }
+
+            mData = data;
+
+            if (isStarted()) {
+                super.deliverResult(data);
+            }
         }
 
         public Throwable getThrowable() {
