@@ -33,7 +33,9 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -47,6 +49,13 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private static final int REQUEST_PICK_IMAGE = 0;
     private static final int REQUEST_CROP = 1;
     private static final int REQUEST_APP_DETAIL_SETTING = 2;
+
+    private static final String[] INTENTS = {
+            "com.htc.pe.intent.action.EDIT_PRINT",
+            Intent.ACTION_EDIT,
+            "com.htc.photoenhancer.action.THEME_CROP",
+            "com.android.camera.action.CROP"
+    };
 
     private String mOutputPath = "/mnt/sdcard/Android/data/xxx.jpg";
 
@@ -70,15 +79,18 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                 startActivityForResult(photoPickerIntent, REQUEST_PICK_IMAGE);
             }
         });
-        
-        View cropButton = findViewById(R.id.crop);
-        cropButton.setOnClickListener(new View.OnClickListener() {
+
+        final Spinner intentSpinner = (Spinner) findViewById(R.id.intentAction);
+        intentSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, INTENTS));
+
+        View sendButton = findViewById(R.id.send);
+        sendButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startEdit();
+                sendIntent((String) intentSpinner.getSelectedItem());
             }
         });
-        
+
         mText = (TextView) findViewById(R.id.srcUri);
         mResultText = (TextView) findViewById(R.id.resultInfo);
         mMinWidthText = (EditText) findViewById(R.id.minWidth);
@@ -106,15 +118,13 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         }
     }
 
-    private void startEdit() {
+    private void sendIntent(String intentAction) {
         Intent intent = new Intent();
         intent.setDataAndType(mState.data, "image/*");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
-        intent.setAction("com.htc.pe.intent.action.EDIT_PRINT");
-        //intent.setAction(Intent.ACTION_EDIT);
-        //intent.setAction("com.htc.photoenhancer.action.THEME_CROP");
-        //intent.setAction("com.android.camera.action.CROP");
+        intent.setAction(intentAction);
+
         int minWidth = 0;
         int minHeight = 0;
         try {
