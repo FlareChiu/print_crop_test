@@ -28,7 +28,9 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.text.TextUtilsCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -43,8 +45,9 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String KEY_STATE = "tpc:state";
-    private static final String KEY_MIN_WIDTH = "min_width";
-    private static final String KEY_MIN_HEIGHT = "min_height";
+    private static final String KEY_INTENT = "tpc:intent";
+    private static final String KEY_MIN_WIDTH = "tpc:min_width";
+    private static final String KEY_MIN_HEIGHT = "tpc:min_height";
 
     private static final int REQUEST_PICK_IMAGE = 0;
     private static final int REQUEST_CROP = 1;
@@ -62,6 +65,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private TextView mText;
     private TextView mResultText;
     private EditText mMinWidthText, mMinHeightText;
+    private Spinner mIntentSpinner;
 
     private State mState;
     
@@ -80,14 +84,14 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             }
         });
 
-        final Spinner intentSpinner = (Spinner) findViewById(R.id.intentAction);
-        intentSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, INTENTS));
+        mIntentSpinner = (Spinner) findViewById(R.id.intentAction);
+        mIntentSpinner.setAdapter(new ArrayAdapter<>(this, R.layout.spinner_item, INTENTS));
 
         View sendButton = findViewById(R.id.send);
         sendButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                sendIntent((String) intentSpinner.getSelectedItem());
+                sendIntent((String) mIntentSpinner.getSelectedItem());
             }
         });
 
@@ -107,6 +111,12 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             mState.cropRect = new Rect(0, 0, 0, 0);
 
             SharedPreferences setting = PreferenceManager.getDefaultSharedPreferences(this);
+            String intentAction = setting.getString(KEY_INTENT, INTENTS[0]);
+            for (int i = 0; i < INTENTS.length; i++) {
+                if (INTENTS[i].equals(intentAction)) {
+                    mIntentSpinner.setSelection(i);
+                }
+            }
             int minWidth = setting.getInt(KEY_MIN_WIDTH, 856);
             int minHeight = setting.getInt(KEY_MIN_HEIGHT, 925);
             mMinWidthText.setText(Integer.toString(minWidth));
@@ -155,6 +165,13 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
         SharedPreferences.Editor settingsEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
         boolean hasValues = false;
+
+        String intentAction = (String) mIntentSpinner.getSelectedItem();
+        if (!TextUtils.isEmpty(intentAction)) {
+            settingsEditor.putString(KEY_INTENT, intentAction);
+            hasValues = true;
+        }
+
         try {
             int minWidth = Integer.valueOf(mMinWidthText.getText().toString());
             settingsEditor.putInt(KEY_MIN_WIDTH, minWidth);
