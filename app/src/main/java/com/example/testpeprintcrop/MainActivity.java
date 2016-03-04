@@ -5,12 +5,9 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import android.Manifest;
-import android.app.LoaderManager;
-import android.content.AsyncTaskLoader;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.Loader;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -40,7 +37,12 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Bitmap> {
+import rx.Observable;
+import rx.Subscriber;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.schedulers.Schedulers;
+
+public class MainActivity extends AppCompatActivity {
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String KEY_STATE = "tpc:state";
@@ -67,12 +69,12 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private Spinner mIntentSpinner;
 
     private State mState;
-    
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
+
         View pickerButton = findViewById(R.id.pick);
         pickerButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -103,7 +105,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             mState = savedInstanceState.getParcelable(KEY_STATE);
 
             if (mState.data != null) {
-                getLoaderManager().initLoader(0, null, this);
+                loadBitmapObservable(mState);
             }
         } else {
             mState = new State();
@@ -199,71 +201,69 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         if (resultCode != RESULT_OK) {
             return;
         }
-        
+
         switch (requestCode) {
-        case REQUEST_PICK_IMAGE:
-            mState.dataPath = null;
-            mState.data = intent.getData();
-            mText.setText(mState.data.toString());
+            case REQUEST_PICK_IMAGE:
+                mState.dataPath = null;
+                mState.data = intent.getData();
+                mText.setText(mState.data.toString());
 
-            ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
-            if (imageFragment == null) {
-                imageFragment = ImageFragment.newInstance(true);
-                getFragmentManager().beginTransaction()
-                        .replace(R.id.fragment_image, imageFragment, ImageFragment.TAG)
-                        .commitAllowingStateLoss();
-            } else {
-                imageFragment.startLoading();
-            }
-
-            getLoaderManager().restartLoader(0, null, this);
-            break;
-
-        case REQUEST_CROP:
-            Rect cropRect = intent.getParcelableExtra("rectOut");
-            if (cropRect != null) { // v2
-                mState.cropRect = cropRect;
-                String savedPath = intent.getStringExtra("filePath");
-                if (savedPath != null) {
-                    mState.dataPath = savedPath;
-                    mState.data = Uri.fromFile(new File(savedPath));
-                    mText.setText(mState.data.toString());
-
-                    getLoaderManager().restartLoader(0, null, this);
-                }
-                mResultText.setText("Rect: " + cropRect + ", W x H = (" + cropRect.width() + ", " + cropRect.height() + ")");                               
-            } else { // v1
-                String savedPath = intent.getStringExtra("externalGivenOutputPath");
-                if (savedPath != null) {
-                    mState.dataPath = savedPath;
-                    mState.data = Uri.fromFile(new File(savedPath));
-                    mText.setText(mState.data.toString());
-
-                    Bundle bundle = new Bundle();
-                    bundle.putBoolean(BitmapLoader.ARGS_KEY_SHOW_BITMAP_DIMENSION, true);
-                    getLoaderManager().restartLoader(0, bundle, this);
-                    mResultText.setText("Loading...");
-                } else {
-                    mResultText.setText("Null result");
-                }
-            }
-            break;
-
-        case REQUEST_APP_DETAIL_SETTING:
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                    == PackageManager.PERMISSION_GRANTED) {
-                if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) != null) {
+                ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
+                if (imageFragment == null) {
+                    imageFragment = ImageFragment.newInstance(true);
                     getFragmentManager().beginTransaction()
-                            .replace(R.id.fragment_image, ImageFragment.newInstance(true), ImageFragment.TAG)
-                            .commit();
-
-                    getLoaderManager().restartLoader(0, null, this);
+                            .replace(R.id.fragment_image, imageFragment, ImageFragment.TAG)
+                            .commitAllowingStateLoss();
+                } else {
+                    imageFragment.startLoading();
                 }
-            }
-            break;
+
+                loadBitmapObservable(mState);
+                break;
+
+            case REQUEST_CROP:
+                Rect cropRect = intent.getParcelableExtra("rectOut");
+                if (cropRect != null) { // v2
+                    mState.cropRect = cropRect;
+                    String savedPath = intent.getStringExtra("filePath");
+                    if (savedPath != null) {
+                        mState.dataPath = savedPath;
+                        mState.data = Uri.fromFile(new File(savedPath));
+                        mText.setText(mState.data.toString());
+
+                        loadBitmapObservable(mState);
+                    }
+                    mResultText.setText("Rect: " + cropRect + ", W x H = (" + cropRect.width() + ", " + cropRect.height() + ")");
+                } else { // v1
+                    String savedPath = intent.getStringExtra("externalGivenOutputPath");
+                    if (savedPath != null) {
+                        mState.dataPath = savedPath;
+                        mState.data = Uri.fromFile(new File(savedPath));
+                        mText.setText(mState.data.toString());
+
+                        loadBitmapObservable(mState, true);
+                        mResultText.setText("Loading...");
+                    } else {
+                        mResultText.setText("Null result");
+                    }
+                }
+                break;
+
+            case REQUEST_APP_DETAIL_SETTING:
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) != null) {
+                        getFragmentManager().beginTransaction()
+                                .replace(R.id.fragment_image, ImageFragment.newInstance(true), ImageFragment.TAG)
+                                .commit();
+
+                        loadBitmapObservable(mState);
+                    }
+                }
+                break;
         }
     }
-    
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
@@ -283,54 +283,6 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         return super.onOptionsItemSelected(item);
     }
 
-    @Override
-    public Loader<Bitmap> onCreateLoader(int id, Bundle args) {
-        BitmapLoader bitmapLoader = new BitmapLoader(this).setUri(mState.data).setPath(mState.dataPath);
-        if (args != null) {
-            bitmapLoader.setShowBitmapDimension(args.getBoolean(BitmapLoader.ARGS_KEY_SHOW_BITMAP_DIMENSION));
-        }
-        return bitmapLoader;
-    }
-
-    @Override
-    public void onLoadFinished(Loader<Bitmap> loader, Bitmap data) {
-        ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
-        if (imageFragment != null) {
-            imageFragment.setImageBitmap(data);
-        }
-
-        BitmapLoader bitmapLoader = (BitmapLoader) loader;
-        Throwable throwable = bitmapLoader.getThrowable();
-        if (throwable != null) {
-            // Permission denied
-            if (throwable instanceof SecurityException) {
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                        != PackageManager.PERMISSION_GRANTED) {
-                    if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) == null) {
-                        getFragmentManager().beginTransaction()
-                                .replace(R.id.fragment_image, ImageNoPermissionFragment.newInstance(),
-                                        ImageNoPermissionFragment.TAG)
-                                .commitAllowingStateLoss();
-
-                        ActivityCompat.requestPermissions(this,
-                                new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
-                    }
-
-                    return;
-                }
-            }
-
-            notifyError(throwable);
-        } else if (bitmapLoader.getShowBitmapDimension()) {
-            mResultText.setText("W x H = (" + data.getWidth() + ", " + data.getHeight() + ")");
-        }
-    }
-
-    @Override
-    public void onLoaderReset(Loader<Bitmap> loader) {
-
-    }
-
     /**
      * Callback received when a permissions request has been completed.
      */
@@ -342,7 +294,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                     .replace(R.id.fragment_image, ImageFragment.newInstance(true), ImageFragment.TAG)
                     .commitAllowingStateLoss();
 
-            getLoaderManager().restartLoader(0, null, this);
+            loadBitmapObservable(mState);
         }
     }
 
@@ -359,164 +311,94 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                 new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
     }
 
-    private static class BitmapLoader extends AsyncTaskLoader<Bitmap> {
-        public static final String ARGS_KEY_SHOW_BITMAP_DIMENSION = "show_bitmap_dimension";
-        private Uri mUri;
-        private String mPath;
-        private boolean mShowBitmapDimension;
-        private Throwable mThrowable;
-        private Bitmap mData;
-
-        public BitmapLoader(Context context) {
-            super(context);
-        }
-
-        public BitmapLoader setUri(Uri uri) {
-            mUri = uri;
-            return this;
-        }
-
-        public BitmapLoader setPath(String path) {
-            mPath = path;
-            return this;
-        }
-
-        public BitmapLoader setShowBitmapDimension(boolean show) {
-            mShowBitmapDimension = show;
-            return this;
-        }
-
-        public boolean getShowBitmapDimension() {
-            return mShowBitmapDimension;
-        }
-
-        @Override
-        public Bitmap loadInBackground() {
-            if (mUri == null) {
-                if (mPath == null) {
-                    return null;
-                }
-
-                mUri = Uri.fromFile(new File(mPath));
+    public Bitmap loadBitmap(Uri uri, String path) throws IOException, SecurityException {
+        if (uri == null) {
+            if (path == null) {
+                return null;
             }
 
-            Bitmap bitmap = null;
-            InputStream is = null;
-            try {
-                Context context = getContext();
-                is = context.getContentResolver().openInputStream(mUri);
-                bitmap = BitmapFactory.decodeStream(is);
-                if (bitmap == null) {
-                    return null;
-                }
+            uri = Uri.fromFile(new File(path));
+        }
 
-                String path = mPath != null ? mPath : BitmapLoader.queryPathFromUri(context, mUri);
-                if (path != null) {
-                    int degree = BitmapLoader.readExifDegree(path);
-                    if (degree != 0) {
-                        Bitmap rotated = createRotatedBitmap(bitmap, degree);
-                        if (rotated != null) {
-                            return rotated;
-                        }
-                    }
-                }
-            } catch (IOException|SecurityException ex) {
-                mThrowable = ex;
-            } finally {
-                if (is != null) {
-                    try {
-                        is.close();
-                    } catch (IOException ex) {
-                        // ignore
+        Bitmap bitmap = null;
+        InputStream is = null;
+        try {
+            Context context = this;
+            is = context.getContentResolver().openInputStream(uri);
+            bitmap = BitmapFactory.decodeStream(is);
+            if (bitmap == null) {
+                return null;
+            }
+
+            if (path == null) {
+                path = queryPathFromUri(context, uri);
+            }
+
+            if (path != null) {
+                int degree = readExifDegree(path);
+                if (degree != 0) {
+                    Bitmap rotated = createRotatedBitmap(bitmap, degree);
+                    if (rotated != null) {
+                        return rotated;
                     }
                 }
             }
-
-            return bitmap;
-        }
-
-        @Override
-        protected void onStartLoading() {
-            if (mData != null) {
-                deliverResult(mData);
-            } else {
-                forceLoad();
-            }
-        }
-
-        @Override
-        protected void onStopLoading() {
-            cancelLoad();
-        }
-
-        @Override
-        protected void onReset() {
-            onStopLoading();
-
-            mData = null;
-        }
-
-        @Override
-        public void deliverResult(Bitmap data) {
-            if (isReset()) {
-                return;
-            }
-
-            mData = data;
-
-            if (isStarted()) {
-                super.deliverResult(data);
-            }
-        }
-
-        public Throwable getThrowable() {
-            return mThrowable;
-        }
-
-        private static String queryPathFromUri(Context context, Uri uri) {
-            String scheme = uri.getScheme();
-            if (ContentResolver.SCHEME_FILE.equals(scheme)) {
-                return uri.getPath();
-            }
-
-            Cursor cursor = null;
-            try {
-                String[] proj = { MediaStore.Images.Media.DATA };
-                cursor = context.getContentResolver().query(uri, proj, null, null, null);
-                if (cursor != null && cursor.moveToFirst()) {
-                    int index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-                    return cursor.getString(index);
-                }
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
+        } finally {
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (IOException ex) {
+                    // ignore
                 }
             }
-
-            return null;
         }
 
-        private static int readExifDegree(String path) throws IOException {
-            ExifInterface exif = new ExifInterface(path);
-            int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-            switch (orientation) {
-                case ExifInterface.ORIENTATION_ROTATE_90:
-                    return 90;
-                case ExifInterface.ORIENTATION_ROTATE_180:
-                    return 180;
-                case ExifInterface.ORIENTATION_ROTATE_270:
-                    return 270;
-                default:
-                    return 0;
+        return bitmap;
+    }
+
+    private static String queryPathFromUri(Context context, Uri uri) {
+        String scheme = uri.getScheme();
+        if (ContentResolver.SCHEME_FILE.equals(scheme)) {
+            return uri.getPath();
+        }
+
+        Cursor cursor = null;
+        try {
+            String[] proj = {MediaStore.Images.Media.DATA};
+            cursor = context.getContentResolver().query(uri, proj, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                return cursor.getString(index);
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
             }
         }
 
-        private static Bitmap createRotatedBitmap(Bitmap source, float degree) {
-            Matrix matrix = new Matrix();
-            matrix.setRotate(degree);
+        return null;
+    }
 
-            return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+    private static int readExifDegree(String path) throws IOException {
+        ExifInterface exif = new ExifInterface(path);
+        int orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_ROTATE_90:
+                return 90;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                return 180;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                return 270;
+            default:
+                return 0;
         }
+    }
+
+    private static Bitmap createRotatedBitmap(Bitmap source, float degree) {
+        Matrix matrix = new Matrix();
+        matrix.setRotate(degree);
+
+        return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
     }
 
     private static class State implements Parcelable {
@@ -535,7 +417,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             dest.writeParcelable(cropRect, 0);
         }
 
-        public static final Parcelable.Creator<State> CREATOR  = new Parcelable.Creator<State>() {
+        public static final Creator<State> CREATOR = new Creator<State>() {
             public State createFromParcel(Parcel p) {
                 State state = new State();
                 state.data = p.readParcelable(Uri.class.getClassLoader());
@@ -553,5 +435,67 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     private void notifyError(Throwable throwable) {
         Log.e(TAG, "print-crop-test", throwable);
         Toast.makeText(getApplicationContext(), throwable.toString(), Toast.LENGTH_LONG).show();
+    }
+
+    private void loadBitmapObservable(State state) {
+        loadBitmapObservable(state, false);
+    }
+
+    private void loadBitmapObservable(final State state, final boolean showBitmapDimension) {
+        Observable.create(new Observable.OnSubscribe<Bitmap>() {
+            @Override
+            public void call(Subscriber<? super Bitmap> subscriber) {
+                Uri uri = state.data;
+                String path = state.dataPath;
+
+                try {
+                    Bitmap bitmap = loadBitmap(uri, path);
+                    subscriber.onNext(bitmap);
+                    subscriber.onCompleted();
+                } catch (Throwable ex) {
+                    subscriber.onError(ex);
+                }
+            }}).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
+            .subscribe(new Subscriber<Bitmap>() {
+                @Override
+                public void onCompleted() {
+
+                }
+
+                @Override
+                public void onError(Throwable e) {
+                    // Permission denied
+                    if (e instanceof SecurityException) {
+                        if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                                != PackageManager.PERMISSION_GRANTED) {
+                            if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) == null) {
+                                getFragmentManager().beginTransaction()
+                                        .replace(R.id.fragment_image, ImageNoPermissionFragment.newInstance(),
+                                                ImageNoPermissionFragment.TAG)
+                                        .commitAllowingStateLoss();
+
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
+                            }
+
+                            return;
+                        }
+                    }
+
+                    notifyError(e);
+                }
+
+                @Override
+                public void onNext(Bitmap bitmap) {
+                    ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
+                    if (imageFragment != null) {
+                        imageFragment.setImageBitmap(bitmap);
+                    }
+
+                    if (showBitmapDimension) {
+                        mResultText.setText("W x H = (" + bitmap.getWidth() + ", " + bitmap.getHeight() + ")");
+                    }
+                }
+            });
     }
 }
