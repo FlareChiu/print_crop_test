@@ -25,7 +25,6 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
@@ -37,12 +36,14 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.trello.rxlifecycle.components.RxActivity;
+
 import rx.Observable;
 import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.schedulers.Schedulers;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends RxActivity {
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String KEY_STATE = "tpc:state";
@@ -441,61 +442,74 @@ public class MainActivity extends AppCompatActivity {
         loadBitmapObservable(state, false);
     }
 
-    private void loadBitmapObservable(final State state, final boolean showBitmapDimension) {
-        Observable.create(new Observable.OnSubscribe<Bitmap>() {
-            @Override
-            public void call(Subscriber<? super Bitmap> subscriber) {
-                Uri uri = state.data;
-                String path = state.dataPath;
+    private void loadBitmapObservable(final State state, boolean showBitmapDimension) {
+        Observable
+                .create(new Observable.OnSubscribe<Bitmap>() {
+                    @Override
+                    public void call(Subscriber<? super Bitmap> subscriber) {
+                        Uri uri = state.data;
+                        String path = state.dataPath;
 
-                try {
-                    Bitmap bitmap = loadBitmap(uri, path);
-                    subscriber.onNext(bitmap);
-                    subscriber.onCompleted();
-                } catch (Throwable ex) {
-                    subscriber.onError(ex);
-                }
-            }}).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
-            .subscribe(new Subscriber<Bitmap>() {
-                @Override
-                public void onCompleted() {
-
-                }
-
-                @Override
-                public void onError(Throwable e) {
-                    // Permission denied
-                    if (e instanceof SecurityException) {
-                        if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                                != PackageManager.PERMISSION_GRANTED) {
-                            if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) == null) {
-                                getFragmentManager().beginTransaction()
-                                        .replace(R.id.fragment_image, ImageNoPermissionFragment.newInstance(),
-                                                ImageNoPermissionFragment.TAG)
-                                        .commitAllowingStateLoss();
-
-                                ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
-                            }
-
-                            return;
+                        try {
+                            Bitmap bitmap = loadBitmap(uri, path);
+                            subscriber.onNext(bitmap);
+                            subscriber.onCompleted();
+                        } catch (Throwable ex) {
+                            subscriber.onError(ex);
                         }
                     }
+                })
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .compose(this.<Bitmap>bindToLifecycle())
+                .subscribe(new BitmapSubscriber(showBitmapDimension));
+    }
 
-                    notifyError(e);
-                }
+    private class BitmapSubscriber extends Subscriber<Bitmap> {
+        private boolean mShowBitmapDimension;
 
-                @Override
-                public void onNext(Bitmap bitmap) {
-                    ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
-                    if (imageFragment != null) {
-                        imageFragment.setImageBitmap(bitmap);
+        public BitmapSubscriber(boolean showBitmapDimension) {
+            mShowBitmapDimension = showBitmapDimension;
+        }
+
+        @Override
+        public void onCompleted() {
+
+        }
+
+        @Override
+        public void onError(Throwable e) {
+            // Permission denied
+            if (e instanceof SecurityException) {
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    if (getFragmentManager().findFragmentByTag(ImageNoPermissionFragment.TAG) == null) {
+                        getFragmentManager().beginTransaction()
+                                .replace(R.id.fragment_image, ImageNoPermissionFragment.newInstance(),
+                                        ImageNoPermissionFragment.TAG)
+                                .commitAllowingStateLoss();
+
+                        ActivityCompat.requestPermissions(MainActivity.this,
+                                new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 0);
                     }
 
-                    if (showBitmapDimension) {
-                        mResultText.setText("W x H = (" + bitmap.getWidth() + ", " + bitmap.getHeight() + ")");
-                    }
+                    return;
                 }
-            });
+            }
+
+            MainActivity.this.notifyError(e);
+        }
+
+        @Override
+        public void onNext(Bitmap bitmap) {
+            ImageFragment imageFragment = (ImageFragment) getFragmentManager().findFragmentByTag(ImageFragment.TAG);
+            if (imageFragment != null) {
+                imageFragment.setImageBitmap(bitmap);
+            }
+
+            if (mShowBitmapDimension) {
+                mResultText.setText("W x H = (" + bitmap.getWidth() + ", " + bitmap.getHeight() + ")");
+            }
+        }
     }
 }
