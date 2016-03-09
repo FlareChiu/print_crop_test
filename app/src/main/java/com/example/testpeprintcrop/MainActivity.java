@@ -41,6 +41,7 @@ import com.trello.rxlifecycle.components.RxActivity;
 import rx.Observable;
 import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Func1;
 import rx.schedulers.Schedulers;
 
 public class MainActivity extends RxActivity {
@@ -444,18 +445,17 @@ public class MainActivity extends RxActivity {
 
     private void loadBitmapObservable(final State state, boolean showBitmapDimension) {
         Observable
-                .create(new Observable.OnSubscribe<Bitmap>() {
+                .just(state)
+                .flatMap(new Func1<State, Observable<Bitmap>>() {
                     @Override
-                    public void call(Subscriber<? super Bitmap> subscriber) {
-                        Uri uri = state.data;
-                        String path = state.dataPath;
-
+                    public Observable<Bitmap> call(State s) {
+                        Uri uri = s.data;
+                        String path = s.dataPath;
                         try {
                             Bitmap bitmap = loadBitmap(uri, path);
-                            subscriber.onNext(bitmap);
-                            subscriber.onCompleted();
-                        } catch (Throwable ex) {
-                            subscriber.onError(ex);
+                            return Observable.just(bitmap);
+                        } catch (IOException e) {
+                            return Observable.error(e);
                         }
                     }
                 })
