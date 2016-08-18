@@ -2,8 +2,8 @@
 
 Test "print crop" intent (com.htc.pe.intent.action.EDIT_PRINT). This intent is sent by PrintStudio and receive by PhotoEditor. PrintStudio is an HTC inhouse app which can print images through cloud printing service. PhotoEditor cooperate with PrintSudio to provide an special intent to let PrintStudio croppoing images.
 
-## CI Server (Jenkins)
-(HTC Internal) http://masd-jenkins.htc.com.tw:8080/jenkins/project/print-crop-test
+## <del> CI Server (Jenkins)
+<del> (HTC Internal) http://masd-jenkins.htc.com.tw:8080/jenkins/project/print-crop-test
  
 ## ScreenShot
 
